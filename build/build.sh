@@ -1,112 +1,81 @@
-name: Auto Build & Release
+#!/usr/bin/env bash
+set -euo pipefail
 
-on:
-  workflow_dispatch:
-  schedule:
-    - cron: '0 0 * * *'
+# 参数顺序：版本 操作系统 架构 类型
+VERSION="$1"
+OS="$2"
+ARCH="$3"
+TYPE="$4"
 
-permissions:
-  contents: write
+echo "========================================"
+echo " Building Kilo Portable"
+echo " Version : $VERSION"
+echo " OS      : $OS"
+echo " Arch    : $ARCH"
+echo " Type    : $TYPE"
+echo "========================================"
 
-jobs:
-  get-version:
-    runs-on: ubuntu-latest
-    outputs:
-      tag: ${{ steps.get-tag.outputs.TAG }}
-    steps:
-      - name: 获取官方最新版本
-        id: get-tag
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          # 获取最新 Release（包括 Pre-release）
-          TAG=$(gh api repos/Kilo-Org/kilocode/releases --jq '.[0].tag_name')
-          if [ -z "$TAG" ] || [ "$TAG" = "null" ]; then
-            echo "❌ 无法获取到最新版本，请检查仓库和网络。"
-            exit 1
-          fi
-          echo "TAG=$TAG" >> $GITHUB_OUTPUT
-          echo "✅ 官方最新版本: $TAG"
+# 创建输出目录
+mkdir -p dist
 
-  build:
-    needs: get-version
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: linux
-            arch: x86_64
-            type: normal
-          - os: linux
-            arch: x86_64
-            type: musl
-          - os: linux
-            arch: arm64
-            type: normal
-          - os: linux
-            arch: arm64
-            type: musl
-          - os: windows
-            arch: x64
-            type: modern
-          - os: windows
-            arch: x64
-            type: legacy
-    steps:
-      - name: 检出代码
-        uses: actions/checkout@v4
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          persist-credentials: false
-          fetch-depth: 1
+# 根据 OS 设置下载 URL 和文件名规则
+case "$OS" in
+  linux)
+    # Linux 资产通常为 kilocode-linux-x64.tar.gz 或 kilocode-linux-arm64.tar.gz
+    if [ "$ARCH" = "x86_64" ] || [ "$ARCH" = "x64" ]; then
+      ARCH_DIR="x64"
+    else
+      ARCH_DIR="$ARCH"
+    fi
+    if [ "$TYPE" = "musl" ]; then
+      # 如果没有 musl 专用包，可回退到 glibc 版本，这里假设官方提供了 musl 后缀的包
+      PKG="kilocode-linux-${ARCH_DIR}-musl.tar.gz"
+    else
+      PKG="kilocode-linux-${ARCH_DIR}.tar.gz"
+    fi
+    DOWNLOAD_URL="https://github.com/Kilo-Org/kilocode/releases/download/${VERSION}/${PKG}"
+    ;;
 
-      - name: 安装依赖
-        run: sudo apt update && sudo apt install -y wget jq unzip
+  windows)
+    # Windows 资产为 kilocode-win32-x64.zip
+    PKG="kilocode-win32-x64.zip"
+    DOWNLOAD_URL="https://github.com/Kilo-Org/kilocode/releases/download/${VERSION}/${PKG}"
+    ;;
 
-      - name: 构建
-        run: |
-          chmod +x build/build.sh
-          ./build/build.sh ${{ needs.get-version.outputs.tag }} ${{ matrix.os }} ${{ matrix.arch }} ${{ matrix.type }}
+  darwin)
+    PKG="kilocode-darwin-${ARCH}.tar.gz"
+    DOWNLOAD_URL="https://github.com/Kilo-Org/kilocode/releases/download/${VERSION}/${PKG}"
+    ;;
 
-      - name: 上传构建产物
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ matrix.os }}-${{ matrix.type }}-${{ matrix.arch }}
-          path: dist/*.tar.gz
+  vscode)
+    echo "vscode type not supported in portable build"
+    exit 1
+    ;;
 
-  release:
-    needs: [get-version, build]
-    runs-on: ubuntu-latest
-    steps:
-      - name: 检出代码
-        uses: actions/checkout@v4
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          persist-credentials: false
-          fetch-depth: 1
+  *)
+    echo "Unknown OS: $OS"
+    exit 1
+    ;;
+esac
 
-      - name: 下载所有构建产物
-        uses: actions/download-artifact@v4
-        with:
-          path: dist
-          merge-multiple: true
+echo "Downloading: $DOWNLOAD_URL"
+curl -fSL --retry 3 "$DOWNLOAD_URL" -o "/tmp/${PKG}"
 
-      - name: 列出产物
-        run: ls -lh dist/
+# 解压并重新打包
+WORK_DIR="/tmp/kilocode-portable-${OS}-${ARCH}-${TYPE}"
+rm -rf "$WORK_DIR"
+mkdir -p "$WORK_DIR"
 
-      - name: 创建/更新 GitHub Release
-        uses: softprops/action-gh-release@v3
-        with:
-          tag_name: ${{ needs.get-version.outputs.tag }}-portable
-          name: Kilocode ${{ needs.get-version.outputs.tag }} (Portable)
-          body: |
-            便携版
-            - Linux x64/arm64 (glibc/musl)
-            - Windows x64 (Bun / Node.js)
-          files: dist/*.tar.gz
-          overwrite_files: true
-          draft: false
-          prerelease: false
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+echo "Extracting..."
+if [[ "$PKG" == *.zip ]]; then
+  unzip -q "/tmp/${PKG}" -d "$WORK_DIR"
+else
+  tar -xzf "/tmp/${PKG}" -C "$WORK_DIR"
+fi
+
+# 创建最终压缩包，放在 dist/ 下
+OUTPUT_NAME="kilocode-portable-${VERSION}-${OS}-${ARCH}-${TYPE}.tar.gz"
+echo "Packaging: $OUTPUT_NAME"
+tar -czf "dist/${OUTPUT_NAME}" -C "$WORK_DIR" .
+
+echo "Build complete: dist/$OUTPUT_NAME"
