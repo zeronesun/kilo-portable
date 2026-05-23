@@ -31,7 +31,6 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # 重点：这里每一行必须再缩进2空格！！！
           - os: linux    arch: x64    type: normal
           - os: linux    arch: x64    type: musl
           - os: linux    arch: x64    type: baseline
@@ -88,9 +87,9 @@ jobs:
           body: |
             Auto‑built portable release from Kilo‑Org/kilocode
             ## Binary Portable Builds
-            - Linux x64/arm64 (normal / musl / baseline / baseline-musl)
-            - Windows x64/arm64 (normal / baseline-x64 only)
-            - macOS x64/arm64 (normal / baseline-x64 only)
+            - Linux x64/arm64 (normal / musl / baseline / baseline‑musl)
+            - Windows x64/arm64 (normal / baseline‑x64 only)
+            - macOS x64/arm64 (normal / baseline‑x64 only)
             ## VSCode Extension Portable Builds
             - Linux / Windows / macOS / Alpine full arch support
           files: dist/*.tar.gz
