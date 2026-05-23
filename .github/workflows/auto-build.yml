@@ -13,16 +13,14 @@ jobs:
     outputs:
       tag: ${{ steps.get-tag.outputs.TAG }}
     steps:
-      - name: Get latest kilocode release
+      - name: Get latest release
         id: get-tag
         run: |
           TAG=$(curl -s --retry 3 https://api.github.com/repos/Kilo-Org/kilocode/releases/latest | jq -r '.tag_name')
           if [[ "$TAG" == "null" || -z "$TAG" ]]; then
-            echo "No version found"
             exit 1
           fi
           echo "TAG=$TAG" >> $GITHUB_OUTPUT
-          echo "Latest version: $TAG"
 
   build:
     needs: get-version
@@ -31,6 +29,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # 严格4空格缩进，和你 opencode‑portable 完全一致
           - os: linux    arch: x64    type: normal
           - os: linux    arch: x64    type: musl
           - os: linux    arch: x64    type: baseline
@@ -61,7 +60,9 @@ jobs:
         run: sudo apt update && sudo apt install -y wget jq unzip
 
       - name: Build portable package
-        run: chmod +x build/build.sh && ./build/build.sh ${{ needs.get-version.outputs.tag }} ${{ matrix.os }} ${{ matrix.arch }} ${{ matrix.type }}
+        run: |
+          chmod +x build/build.sh
+          ./build/build.sh ${{ needs.get-version.outputs.tag }} ${{ matrix.os }} ${{ matrix.arch }} ${{ matrix.type }}
 
       - uses: actions/upload-artifact@v4
         with:
@@ -85,13 +86,11 @@ jobs:
           tag_name: ${{ needs.get-version.outputs.tag }}-portable
           name: Kilo ${{ needs.get-version.outputs.tag }} (Portable)
           body: |
-            Auto‑built portable release from Kilo‑Org/kilocode
-            ## Binary Portable Builds
+            Auto‑built portable release
             - Linux x64/arm64 (normal / musl / baseline / baseline‑musl)
             - Windows x64/arm64 (normal / baseline‑x64 only)
             - macOS x64/arm64 (normal / baseline‑x64 only)
-            ## VSCode Extension Portable Builds
-            - Linux / Windows / macOS / Alpine full arch support
+            - VSCode Extension full arch support
           files: dist/*.tar.gz
           overwrite_files: true
         env:
