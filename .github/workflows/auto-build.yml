@@ -1,4 +1,5 @@
 name: Auto Build & Release
+
 on:
   workflow_dispatch:
   schedule:
@@ -13,14 +14,18 @@ jobs:
     outputs:
       tag: ${{ steps.get-tag.outputs.TAG }}
     steps:
-      - name: Get latest release
+      - name: 获取官方最新版本
         id: get-tag
         run: |
-          TAG=$(curl -s --retry 3 https://api.github.com/repos/Kilo-Org/kilocode/releases/latest | jq -r '.tag_name')
-          if [[ "$TAG" == "null" || -z "$TAG" ]]; then
-            exit 1
-          fi
+          for i in {1..3}; do
+            TAG=$(curl -s --retry 3 https://api.github.com/repos/zeronesun/kilo/releases/latest | jq -r '.tag_name')
+            if [ "$TAG" != "null" ] && [ -n "$TAG" ]; then
+              break
+            fi
+            sleep 5
+          done
           echo "TAG=$TAG" >> $GITHUB_OUTPUT
+          echo "✅ 官方最新版本: $TAG"
 
   build:
     needs: get-version
@@ -29,62 +34,78 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # 严格4空格缩进，和你 opencode‑portable 完全一致
-          - os: linux    arch: x64    type: normal
-          - os: linux    arch: x64    type: musl
-          - os: linux    arch: x64    type: baseline
-          - os: linux    arch: x64    type: baseline-musl
-          - os: linux    arch: arm64  type: normal
-          - os: linux    arch: arm64  type: musl
-          - os: windows  arch: x64    type: normal
-          - os: windows  arch: x64    type: baseline
-          - os: windows  arch: arm64  type: normal
-          - os: darwin   arch: x64    type: normal
-          - os: darwin   arch: x64    type: baseline
-          - os: darwin   arch: arm64  type: normal
-          - os: vscode   arch: x64    type: linux
-          - os: vscode   arch: arm64  type: linux
-          - os: vscode   arch: x64    type: win32
-          - os: vscode   arch: arm64  type: win32
-          - os: vscode   arch: x64    type: darwin
-          - os: vscode   arch: arm64  type: darwin
-          - os: vscode   arch: x64    type: alpine
-          - os: vscode   arch: arm64  type: alpine
-
+          - os: linux
+            arch: x86_64
+            type: normal
+          - os: linux
+            arch: x86_64
+            type: musl
+          - os: linux
+            arch: arm64
+            type: normal
+          - os: linux
+            arch: arm64
+            type: musl
+          - os: windows
+            arch: x64
+            type: modern
+          - os: windows
+            arch: x64
+            type: legacy
     steps:
-      - uses: actions/checkout@v4
+      - name: 检出代码
+        uses: actions/checkout@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
+          persist-credentials: false
+          fetch-depth: 1
 
-      - name: Install dependencies
+      - name: 安装依赖
         run: sudo apt update && sudo apt install -y wget jq unzip
 
-      - name: Build portable package
+      - name: 构建
         run: |
           chmod +x build/build.sh
-          ./build/build.sh ${{ needs.get-version.outputs.tag }} ${{ matrix.os }} ${{ matrix.arch }} ${{ matrix.type }}
+          ./build/build.sh ${{ needs.get-version.outputs.tag }} ${{ matrix.arch }} ${{ matrix.type }}
 
-      - uses: actions/upload-artifact@v4
+      - name: 上传构建产物
+        uses: actions/upload-artifact@v4
         with:
-          name: artifacts
+          name: ${{ matrix.os }}-${{ matrix.type }}-${{ matrix.arch }}
           path: dist/*.tar.gz
 
   release:
     needs: [get-version, build]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
+      - name: 检出代码
+        uses: actions/checkout@v4
         with:
-          name: artifacts
+          token: ${{ secrets.GITHUB_TOKEN }}
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: 下载所有构建产物
+        uses: actions/download-artifact@v4
+        with:
           path: dist
           merge-multiple: true
 
-      - name: Create Release
-  uses: softprops/action-gh-release@v3
-  with:
-    tag_name: ${{ github.ref_name }}   # 或你实际用的标签名
-    files: dist/*.tar.gz
-    overwrite_files: true
-  env:
-    GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: 列出产物
+        run: ls -lh dist/
+
+      - name: 创建/更新 GitHub Release
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ needs.get-version.outputs.tag }}-portable
+          name: Kilo ${{ needs.get-version.outputs.tag }} (Portable)
+          body: |
+            便携版
+            - Linux x64/arm64 (glibc/musl)
+            - Windows x64 (Bun / Node.js)
+          files: dist/*.tar.gz
+          overwrite_files: true
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
