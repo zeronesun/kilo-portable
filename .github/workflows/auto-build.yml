@@ -1,7 +1,5 @@
 name: Auto Build & Release
 on:
-  push:
-    branches: [ main ]
   workflow_dispatch:
   schedule:
     - cron: '0 0 * * *'
@@ -15,16 +13,17 @@ jobs:
     outputs:
       tag: ${{ steps.get-tag.outputs.TAG }}
     steps:
-      - name: Get latest release (including pre-release)
+      - name: Get latest official version
         id: get-tag
         run: |
-          TAG=$(curl -s --retry 3 "https://api.github.com/repos/Kilo-Org/kiloco/releases?per_page=1" | jq -r '.[0].tag_name')
+          # 正确仓库：kilocode，正确latest接口
+          TAG=$(curl -s --retry 3 https://api.github.com/repos/Kilo-Org/kilocode/releases/latest | jq -r '.tag_name')
           if [[ "$TAG" == "null" || -z "$TAG" ]]; then
             echo "❌ No version found"
             exit 1
           fi
           echo "TAG=$TAG" >> $GITHUB_OUTPUT
-          echo "Latest version: $TAG"
+          echo "✅ Latest version: $TAG"
 
   build:
     needs: get-version
@@ -48,19 +47,15 @@ jobs:
           - os: windows
             arch: x64
             type: modern
+
     steps:
       - uses: actions/checkout@v4
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-
       - name: Install dependencies
         run: sudo apt update && sudo apt install -y wget jq unzip
-
-      - name: Build portable package
+      - name: Build portable
         run: |
           chmod +x build/build.sh
           ./build/build.sh ${{ needs.get-version.outputs.tag }} ${{ matrix.arch }} ${{ matrix.type }}
-
       - uses: actions/upload-artifact@v4
         with:
           name: artifacts
@@ -71,21 +66,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
+      - uses: download-artifact@v4
         with:
           name: artifacts
           path: dist
           merge-multiple: true
-
-      - name: Create Release
+      - name: Release
         uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ needs.get-version.outputs.tag }}-portable
-          name: Kilo ${{ needs.get-version.outputs.tag }} (Portable)
-          body: |
-            🚀 Auto-built portable release
-            - Linux x64/arm64 (glibc/musl)
-            - Windows x64
+          name: Kilocode ${{ needs.get-version.outputs.tag }} Portable
           files: dist/*.tar.gz
           overwrite_files: true
         env:
