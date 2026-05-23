@@ -45,7 +45,7 @@ build_linux() {
   echo "✅ Linux: $out"
 }
 
-# Windows 构建（仅x64支持baseline）
+# Windows 构建
 build_windows() {
   local ver="$1" arch="$2" typ="$3"
   local suffix=""
@@ -64,7 +64,7 @@ ${PROJECT_NAME}.exe %*" > "$TEMP_DIR/win/${PROJECT_NAME}.bat"
   echo "✅ Windows: $out"
 }
 
-# macOS 构建（仅x64支持baseline）
+# macOS 构建
 build_darwin() {
   local ver="$1" arch="$2" typ="$3"
   local suffix=""
