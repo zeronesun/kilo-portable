@@ -19,7 +19,6 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          # 获取最新 Release（包括 Pre-release）
           TAG=$(gh api repos/Kilo-Org/kilocode/releases --jq '.[0].tag_name')
           if [ -z "$TAG" ] || [ "$TAG" = "null" ]; then
             echo "❌ 无法获取到最新版本，请检查仓库和网络。"
@@ -30,44 +29,75 @@ jobs:
 
   build:
     needs: get-version
-    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
         include:
-          - os: linux
+          # Linux
+          - os: ubuntu-latest
             arch: x86_64
             type: normal
-          - os: linux
+          - os: ubuntu-latest
             arch: x86_64
             type: musl
-          - os: linux
+          - os: ubuntu-latest
+            arch: x86_64
+            type: baseline
+          - os: ubuntu-latest
+            arch: x86_64
+            type: baseline-musl
+          - os: ubuntu-latest
             arch: arm64
             type: normal
-          - os: linux
+          - os: ubuntu-latest
             arch: arm64
             type: musl
-          - os: windows
+          # Windows
+          - os: windows-latest
             arch: x64
             type: modern
-          - os: windows
+          - os: windows-latest
             arch: x64
-            type: legacy
+            type: legacy          # baseline
+          - os: windows-latest
+            arch: arm64
+            type: modern
+          # macOS
+          - os: macos-latest
+            arch: arm64
+            type: modern          # darwin-arm64.zip
+          - os: macos-latest
+            arch: x64
+            type: modern          # darwin-x64.zip
+    runs-on: ${{ matrix.os }}
+
     steps:
       - name: 检出代码
         uses: actions/checkout@v4
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          persist-credentials: false
+          token: ${{ github.token }}
           fetch-depth: 1
 
-      - name: 安装依赖
+      - name: 安装依赖 (Linux)
+        if: runner.os == 'Linux'
         run: sudo apt update && sudo apt install -y wget jq unzip
 
+      - name: 安装依赖 (macOS)
+        if: runner.os == 'macOS'
+        run: brew install wget jq unzip
+
       - name: 构建
+        shell: bash
         run: |
           chmod +x build/build.sh
-          ./build/build.sh ${{ needs.get-version.outputs.tag }} ${{ matrix.os }} ${{ matrix.arch }} ${{ matrix.type }}
+          # 映射运行器操作系统到脚本所需的参数
+          case "${{ matrix.os }}" in
+            ubuntu-latest)   BUILD_OS="linux" ;;
+            windows-latest)  BUILD_OS="windows" ;;
+            macos-latest)    BUILD_OS="darwin" ;;
+            *)               BUILD_OS="linux" ;;
+          esac
+          ./build/build.sh ${{ needs.get-version.outputs.tag }} "$BUILD_OS" ${{ matrix.arch }} ${{ matrix.type }}
 
       - name: 上传构建产物
         uses: actions/upload-artifact@v4
@@ -82,8 +112,7 @@ jobs:
       - name: 检出代码
         uses: actions/checkout@v4
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          persist-credentials: false
+          token: ${{ github.token }}
           fetch-depth: 1
 
       - name: 下载所有构建产物
@@ -102,11 +131,12 @@ jobs:
           name: Kilocode ${{ needs.get-version.outputs.tag }} (Portable)
           body: |
             便携版
-            - Linux x64/arm64 (glibc/musl)
-            - Windows x64 (Bun / Node.js)
+            - Linux x64/arm64 (glibc/musl/baseline)
+            - Windows x64/arm64 (modern/legacy)
+            - macOS arm64/x64
           files: dist/*.tar.gz
           overwrite_files: true
           draft: false
           prerelease: false
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ github.token }}
