@@ -13,10 +13,10 @@ jobs:
     outputs:
       tag: ${{ steps.get-tag.outputs.TAG }}
     steps:
-      - name: Get latest official version
+      - name: Get latest kilocode release
         id: get-tag
         run: |
-          # 正确仓库：kilocode，正确latest接口
+          # 官方标准latest接口，仓库精准为kilocode
           TAG=$(curl -s --retry 3 https://api.github.com/repos/Kilo-Org/kilocode/releases/latest | jq -r '.tag_name')
           if [[ "$TAG" == "null" || -z "$TAG" ]]; then
             echo "❌ No version found"
@@ -50,12 +50,17 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Install dependencies
         run: sudo apt update && sudo apt install -y wget jq unzip
-      - name: Build portable
+
+      - name: Build portable package
         run: |
           chmod +x build/build.sh
           ./build/build.sh ${{ needs.get-version.outputs.tag }} ${{ matrix.arch }} ${{ matrix.type }}
+
       - uses: actions/upload-artifact@v4
         with:
           name: artifacts
@@ -66,16 +71,23 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: download-artifact@v4
+
+      # 修复：必须加 actions/ 前缀
+      - uses: actions/download-artifact@v4
         with:
           name: artifacts
           path: dist
           merge-multiple: true
-      - name: Release
+
+      - name: Create Release
         uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ needs.get-version.outputs.tag }}-portable
-          name: Kilocode ${{ needs.get-version.outputs.tag }} Portable
+          name: Kilo ${{ needs.get-version.outputs.tag }} (Portable)
+          body: |
+            🚀 Auto‑built portable release from Kilo‑Org/kilocode
+            - Linux x64/arm64 (glibc/musl)
+            - Windows x64
           files: dist/*.tar.gz
           overwrite_files: true
         env:
