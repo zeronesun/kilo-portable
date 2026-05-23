@@ -1,70 +1,90 @@
-#!/bin/bash
-set -euo pipefail
+name: Auto Build & Release
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 0 * * *'
 
-PROJECT_NAME="kiloco"
-OUTPUT_DIR="dist"
-TEMP_DIR="tmp"
-UPSTREAM_REPO="Kilo-Org/kiloco"
-UPSTREAM_BASE_URL="https://github.com/${UPSTREAM_REPO}/releases/download"
+permissions:
+  contents: write
 
-cleanup() {
-  rm -rf "$TEMP_DIR" "$PROJECT_NAME"
-}
-trap cleanup EXIT
+jobs:
+  get-version:
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.get-tag.outputs.TAG }}
+    steps:
+      - name: Get latest official version
+        id: get-tag
+        run: |
+          TAG=$(curl -s --retry 3 https://api.github.com/repos/Kilo-Org/kiloco/releases/latest | jq -r '.tag_name')
+          echo "TAG=$TAG" >> $GITHUB_OUTPUT
+          echo "Latest version: $TAG"
 
-download_file() {
-  local url="$1"
-  local output="$2"
-  echo "Download: $url"
-  wget --progress=bar:force:noscroll -t 3 "$url" -O "$output"
-}
+  build:
+    needs: get-version
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: linux
+            arch: x64
+            type: normal
+          - os: linux
+            arch: x64
+            type: musl
+          - os: linux
+            arch: arm64
+            type: normal
+          - os: linux
+            arch: arm64
+            type: musl
+          - os: windows
+            arch: x64
+            type: modern
+          - os: windows
+            arch: x64
+            type: legacy
 
-render_filename() {
-  local v="$1" os="$2" type="$3" arch="$4"
-  echo "${PROJECT_NAME}-${v}-portable-${os}-${type}-${arch}.tar.gz"
-}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
 
-build_linux() {
-  local version="$1" arch="$2" build_type="$3"
-  local libc="glibc"
-  [ "$build_type" = "musl" ] && libc="musl"
+      - name: Install dependencies
+        run: sudo apt update && sudo apt install -y wget jq unzip
 
-  local filename=$(render_filename "$version" "linux" "$libc" "$arch")
-  mkdir -p "$OUTPUT_DIR" "$TEMP_DIR" "$PROJECT_NAME/bin"
+      - name: Build portable package
+        run: |
+          chmod +x build/build.sh
+          ./build/build.sh ${{ needs.get-version.outputs.tag }} ${{ matrix.arch }} ${{ matrix.type }}
 
-  download_file "${UPSTREAM_BASE_URL}/${version}/${PROJECT_NAME}-linux-${arch}-${libc}.tar.gz" "$TEMP_DIR/pkg.tar.gz"
-  tar xf "$TEMP_DIR/pkg.tar.gz" -C "$TEMP_DIR"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: build-${{ matrix.os }}-${{ matrix.type }}-${{ matrix.arch }}
+          path: dist/*.tar.gz
 
-  local bin=$(find "$TEMP_DIR" -name "$PROJECT_NAME" -type f | head -n1)
-  cp "$bin" "$PROJECT_NAME/bin/"
-  chmod +x "$PROJECT_NAME/bin/$PROJECT_NAME"
+  release:
+    needs: [get-version, build]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
 
-  tar czf "${OUTPUT_DIR}/${filename}" "$PROJECT_NAME/"
-  echo "Built: $filename"
-}
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
 
-build_windows() {
-  local version="$1" arch="$2" runtime="$3"
-  local filename=$(render_filename "$version" "windows" "$runtime" "$arch")
-  mkdir -p "$OUTPUT_DIR" "$TEMP_DIR/win"
-
-  download_file "${UPSTREAM_BASE_URL}/${version}/${PROJECT_NAME}-windows-x64.zip" "$TEMP_DIR/win/pkg.zip"
-  unzip -q "$TEMP_DIR/win/pkg.zip" -d "$TEMP_DIR/win"
-
-  echo "@echo off
-${PROJECT_NAME}.exe %*" > "$TEMP_DIR/win/${PROJECT_NAME}.bat"
-
-  tar czf "${OUTPUT_DIR}/${filename}" -C "$TEMP_DIR/win" .
-  echo "Built: $filename"
-}
-
-VERSION="$1"
-ARCH="$2"
-TYPE="$3"
-[ "$ARCH" = "x86_64" ] && ARCH="x64"
-
-case "$TYPE" in
-  normal|musl) build_linux "$VERSION" "$ARCH" "$TYPE" ;;
-  modern|legacy) build_windows "$VERSION" "$ARCH" "$TYPE" ;;
-  *) echo "Invalid type" && exit 1 ;;
-esac
+      - name: Create Release
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ needs.get-version.outputs.tag }}-portable
+          name: Kiloco ${{ needs.get-version.outputs.tag }} Portable
+          body: |
+            🚀 Auto-built portable version
+            - Linux x64/arm64 (glibc/musl)
+            - Windows x64
+          files: dist/*.tar.gz
+          overwrite_files: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
