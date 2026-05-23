@@ -1,0 +1,27 @@
+[plugin]
+name = "kiloco-portable"
+repository = "https://github.com/zeronesun/kilo-portable"
+homepage = "https://github.com/zeronesun/kilo-portable"
+description = "Kiloco 便携版，Linux/Windows 开箱即用"
+
+[versions]
+latest = "https://api.github.com/repos/zeronesun/kilo-portable/releases/latest"
+
+[install]
+script = """
+OS=$(uname -s | tr '[:upper:]' '[:lower:]')
+case $(uname -m) in
+  x86_64|amd64) ARCH="x64" ;;
+  aarch64|arm64) ARCH="arm64" ;;
+  *) echo "❌ 不支持架构"; exit 1 ;;
+esac
+
+if ldd /bin/ls | grep -q musl; then LIBC="musl"; else LIBC="glibc"; fi
+PURE_VERSION="${version%-portable}"
+
+curl -fL "https://github.com/zeronesun/kilo-portable/releases/download/${version}/kiloco-${PURE_VERSION}-portable-linux-${LIBC}-${ARCH}.tar.gz" | tar xz
+mkdir -p "${mise_path}/bin"
+mv kiloco/bin/* "${mise_path}/bin/"
+chmod +x "${mise_path}/bin/kiloco"
+echo "✅ 安装成功！"
+"""
