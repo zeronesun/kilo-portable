@@ -1,35 +1,30 @@
 name: Auto Build & Release
 on:
-  workflow_dispatch:  # 手动触发
+  workflow_dispatch:
   schedule:
-    - cron: '0 0 * * *' # 每日自动构建
+    - cron: '0 0 * * *'
 
 permissions:
   contents: write
 
 jobs:
-  # 第一步：获取官方最新版本（修复空值问题）
   get-version:
     runs-on: ubuntu-latest
     outputs:
       tag: ${{ steps.get-tag.outputs.TAG }}
     steps:
-      - name: 获取 Kiloco 官方最新 Release 版本
+      - name: 获取最新版本（包含预发布版）
         id: get-tag
         run: |
-          # 重试3次获取版本，避免网络问题
-          TAG=$(curl -s --retry 3 https://api.github.com/repos/Kilo-Org/kiloco/releases/latest | jq -r '.tag_name')
-          
-          # 关键修复：如果版本为空，强制退出，避免null错误
+          # 取最新1条Release（包含pre-release）
+          TAG=$(curl -s --retry 3 "https://api.github.com/repos/Kilo-Org/kiloco/releases?per_page=1" | jq -r '.[0].tag_name')
           if [[ "$TAG" == "null" || -z "$TAG" ]]; then
-            echo "❌ 未获取到官方最新版本，终止任务"
+            echo "❌ 未获取到版本，终止"
             exit 1
           fi
-          
           echo "TAG=$TAG" >> $GITHUB_OUTPUT
-          echo "✅ 官方最新版本：$TAG"
+          echo "✅ 最新版本：$TAG"
 
-  # 第二步：多平台构建
   build:
     needs: get-version
     runs-on: ubuntu-latest
@@ -42,43 +37,43 @@ jobs:
           - os: linux    arch: arm64   type: normal
           - os: linux    arch: arm64   type: musl
           - os: windows  arch: x64     type: modern
-          - os: windows  arch: x64     type: legacy
 
     steps:
       - uses: actions/checkout@v4
-      
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
       - name: 安装依赖
         run: sudo apt update && sudo apt install -y wget jq unzip
-      
+
       - name: 构建便携包
         run: |
           chmod +x build/build.sh
           ./build/build.sh ${{ needs.get-version.outputs.tag }} ${{ matrix.arch }} ${{ matrix.type }}
-      
+
       - uses: actions/upload-artifact@v4
         with:
           name: artifacts
           path: dist/*.tar.gz
 
-  # 第三步：发布 Release
   release:
     needs: [get-version, build]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      
       - uses: actions/download-artifact@v4
         with:
           name: artifacts
           path: dist
-      
-      - name: 发布便携版 Release
+          merge-multiple: true
+
+      - name: 发布便携版
         uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ needs.get-version.outputs.tag }}-portable
-          name: Kiloco ${{ needs.get-version.outputs.tag }} (便携版)
+          name: Kilo ${{ needs.get-version.outputs.tag }} (Portable)
           body: |
-            🚀 自动同步官方版本构建
+            🚀 自动同步官方预编译包构建
             ✅ Linux x64/arm64 (glibc/musl)
             ✅ Windows x64
           files: dist/*.tar.gz
