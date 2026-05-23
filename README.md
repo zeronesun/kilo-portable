@@ -44,7 +44,7 @@
 
 ## 项目简介
 
-本项目每 30 分钟自动检测 [Kilo 官方 Release](https://github.com/Kilo-Org/kilocode/releases) 的最新版本（含预发布版），下载官方已编译好的二进制包，重新打包为标准的 `.tar.gz` 便携版。所有构建产物均**自包含运行环境**，无需额外安装 Node.js 或 Bun，解压后即可直接在终端中使用。
+项目自动检测 [Kilo 官方 Release](https://github.com/Kilo-Org/kilocode/releases) 的最新版本（含预发布版），下载官方已编译好的二进制包，重新打包为标准的 `.tar.gz` 便携版。所有构建产物均**自包含运行环境**，无需额外安装 Node.js 或 Bun，解压后即可直接在终端中使用。
 
 > **为什么选择便携版？**  
 > - 不需要系统级安装，不污染系统环境  
