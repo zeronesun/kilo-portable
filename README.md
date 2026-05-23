@@ -159,16 +159,16 @@ chmod +x build/build.sh
 
 ---
 
-## Star History
+## ⭐ Star History
 
-[![Star History Chart](https://api.star-history.com/svg?repos=zeronesun/kilo-portable&type=Date)](https://star-history.com/#zeronesun/kilo-portable&Date)
-
+[![Star History Chart](https://api.star-history.com/chart?repos=zeronesun/kilo-portable&type=date&legend=bottom-right)](https://www.star-history.com/?repos=zeronesun%2Fkilo-portable&type=date&legend=top-left)
 ---
 
 ## 许可证
 
 本项目中的工作流文件、构建脚本等原创代码采用 **MIT License** 发布。  
 通过本仓库下载的 Kilo 便携版包基于官方构建，其版权和许可证遵循 [Kilo 官方协议](https://github.com/Kilo-Org/kilocode/blob/main/LICENSE)。
+
 
 <!-- MARKDOWN LINKS & IMAGES -->
 [contributors-shield]: https://img.shields.io/github/contributors/zeronesun/kilo-portable.svg?style=for-the-badge
