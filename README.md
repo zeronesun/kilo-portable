@@ -12,7 +12,7 @@
 <div align="center">
   <h3 align="center">Kilo Portable</h3>
   <p align="center">
-    非官方 Kilo 便携版自动构建项目 · 开箱即用，全平台覆盖
+    基于官方 Kilo 便携版自动构建项目 · 运行时内置，开箱即用，全平台覆盖
     <br />
     <a href="https://github.com/zeronesun/kilo-portable/releases"><strong>📦 前往下载 »</strong></a>
     <br />
