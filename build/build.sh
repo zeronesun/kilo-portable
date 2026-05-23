@@ -7,12 +7,14 @@ TEMP_DIR="tmp"
 UPSTREAM_REPO="Kilo-Org/kilocode"
 UPSTREAM_BASE_URL="https://github.com/${UPSTREAM_REPO}/releases/download"
 
-cleanup() { rm -rf "$TEMP_DIR" "$PROJECT_NAME"; }
+cleanup() {
+  rm -rf "$TEMP_DIR" "$PROJECT_NAME"
+}
 trap cleanup EXIT
 
 download_file() {
-  local url="$1" output="$2"
-  echo "🔻 Downloading: $url"
+  local url="$1"
+  local output="$2"
   wget --progress=bar:force:noscroll -t 3 "$url" -O "$output"
 }
 
@@ -21,7 +23,6 @@ render_filename() {
   echo "${PROJECT_NAME}-${ver}-portable-${os}-${arch}-${typ}.tar.gz"
 }
 
-# Linux 构建
 build_linux() {
   local ver="$1" arch="$2" typ="$3"
   local suffix=""
@@ -42,10 +43,8 @@ build_linux() {
   cp "$bin" "$PROJECT_NAME/bin/"
   chmod +x "$PROJECT_NAME/bin/$PROJECT_NAME"
   tar czf "${OUTPUT_DIR}/${out}" "$PROJECT_NAME/"
-  echo "✅ Linux: $out"
 }
 
-# Windows 构建
 build_windows() {
   local ver="$1" arch="$2" typ="$3"
   local suffix=""
@@ -61,10 +60,8 @@ build_windows() {
   echo "@echo off
 ${PROJECT_NAME}.exe %*" > "$TEMP_DIR/win/${PROJECT_NAME}.bat"
   tar czf "${OUTPUT_DIR}/${out}" -C "$TEMP_DIR/win" .
-  echo "✅ Windows: $out"
 }
 
-# macOS 构建
 build_darwin() {
   local ver="$1" arch="$2" typ="$3"
   local suffix=""
@@ -78,10 +75,8 @@ build_darwin() {
   download_file "${UPSTREAM_BASE_URL}/${ver}/${pkg}" "$TEMP_DIR/darwin/pkg.zip"
   unzip -q "$TEMP_DIR/darwin/pkg.zip" -d "$TEMP_DIR/darwin"
   tar czf "${OUTPUT_DIR}/${out}" -C "$TEMP_DIR/darwin" .
-  echo "✅ macOS: $out"
 }
 
-# VSIX 构建
 build_vscode() {
   local ver="$1" arch="$2" typ="$3"
   local pkg="${PROJECT_NAME}-vscode-${typ}-${arch}.vsix"
@@ -90,10 +85,8 @@ build_vscode() {
   mkdir -p "$OUTPUT_DIR" "$TEMP_DIR/vsix"
   download_file "${UPSTREAM_BASE_URL}/${ver}/${pkg}" "$TEMP_DIR/vsix/${pkg}"
   tar czf "${OUTPUT_DIR}/${out}" -C "$TEMP_DIR/vsix" "${pkg}"
-  echo "✅ VSIX: $out"
 }
 
-# 主入口
 VERSION="$1"
 OS="$2"
 ARCH="$3"
@@ -104,5 +97,5 @@ case "$OS" in
   windows) build_windows "$VERSION" "$ARCH" "$TYPE" ;;
   darwin) build_darwin "$VERSION" "$ARCH" "$TYPE" ;;
   vscode) build_vscode "$VERSION" "$ARCH" "$TYPE" ;;
-  *) echo "❌ Invalid OS" && exit 1 ;;
+  *) exit 1 ;;
 esac
