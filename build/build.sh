@@ -18,50 +18,59 @@ echo "========================================"
 # 创建输出目录
 mkdir -p dist
 
-# 根据 OS 设置下载 URL 和文件名规则
+# ---------- 将工作流中的变量映射为官方文件名中的字段 ----------
+# 架构映射：x86_64 / x64 -> x64， arm64 -> arm64
+case "$ARCH" in
+  x86_64|x64) ASSET_ARCH="x64" ;;
+  arm64)      ASSET_ARCH="arm64" ;;
+  *)          echo "Unsupported arch: $ARCH"; exit 1 ;;
+esac
+
+# 操作系统映射（用于文件名前缀）
 case "$OS" in
-  linux)
-    # Linux 资产通常为 kilocode-linux-x64.tar.gz 或 kilocode-linux-arm64.tar.gz
-    if [ "$ARCH" = "x86_64" ] || [ "$ARCH" = "x64" ]; then
-      ARCH_DIR="x64"
-    else
-      ARCH_DIR="$ARCH"
-    fi
-    if [ "$TYPE" = "musl" ]; then
-      # 如果没有 musl 专用包，可回退到 glibc 版本，这里假设官方提供了 musl 后缀的包
-      PKG="kilocode-linux-${ARCH_DIR}-musl.tar.gz"
-    else
-      PKG="kilocode-linux-${ARCH_DIR}.tar.gz"
-    fi
-    DOWNLOAD_URL="https://github.com/Kilo-Org/kilocode/releases/download/${VERSION}/${PKG}"
-    ;;
+  linux)   ASSET_OS="linux" ;;
+  windows) ASSET_OS="windows" ;;
+  darwin)  ASSET_OS="darwin" ;;
+  *)       echo "Unsupported OS: $OS"; exit 1 ;;
+esac
 
-  windows)
-    # Windows 资产为 kilocode-win32-x64.zip
-    PKG="kilocode-win32-x64.zip"
-    DOWNLOAD_URL="https://github.com/Kilo-Org/kilocode/releases/download/${VERSION}/${PKG}"
+# 根据类型拼接后缀
+case "$OS-$TYPE" in
+  linux-normal)
+    SUFFIX=".tar.gz"
     ;;
-
-  darwin)
-    PKG="kilocode-darwin-${ARCH}.tar.gz"
-    DOWNLOAD_URL="https://github.com/Kilo-Org/kilocode/releases/download/${VERSION}/${PKG}"
+  linux-musl)
+    SUFFIX="-musl.tar.gz"
     ;;
-
-  vscode)
-    echo "vscode type not supported in portable build"
-    exit 1
+  linux-baseline)
+    SUFFIX="-baseline.tar.gz"
     ;;
-
+  linux-baseline-musl)
+    SUFFIX="-baseline-musl.tar.gz"
+    ;;
+  windows-modern)
+    SUFFIX=".zip"
+    ;;
+  windows-legacy)
+    SUFFIX="-baseline.zip"
+    ;;
+  darwin-*)
+    SUFFIX=".zip"
+    ;;
   *)
-    echo "Unknown OS: $OS"
+    echo "Unsupported type $TYPE for $OS"
     exit 1
     ;;
 esac
 
+PKG="kilo-${ASSET_OS}-${ASSET_ARCH}${SUFFIX}"
+DOWNLOAD_URL="https://github.com/Kilo-Org/kilocode/releases/download/${VERSION}/${PKG}"
+
+# ---------- 下载 ----------
 echo "Downloading: $DOWNLOAD_URL"
 curl -fSL --retry 3 "$DOWNLOAD_URL" -o "/tmp/${PKG}"
 
-# 解压并重新打包
+# ---------- 解压并重新打包 ----------
 WORK_DIR="/tmp/kilocode-portable-${OS}-${ARCH}-${TYPE}"
 rm -rf "$WORK_DIR"
 mkdir -p "$WORK_DIR"
@@ -73,7 +82,6 @@ else
   tar -xzf "/tmp/${PKG}" -C "$WORK_DIR"
 fi
 
-# 创建最终压缩包，放在 dist/ 下
 OUTPUT_NAME="kilocode-portable-${VERSION}-${OS}-${ARCH}-${TYPE}.tar.gz"
 echo "Packaging: $OUTPUT_NAME"
 tar -czf "dist/${OUTPUT_NAME}" -C "$WORK_DIR" .
