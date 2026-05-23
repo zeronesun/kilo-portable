@@ -81,17 +81,10 @@ jobs:
           merge-multiple: true
 
       - name: Create Release
-        uses: softprops/action-gh-release@v3
-        with:
-          tag_name: ${{ needs.get-version.outputs.tag }}-portable
-          name: Kilo ${{ needs.get-version.outputs.tag }} (Portable)
-          body: |
-            Auto‑built portable release
-            - Linux x64/arm64 (normal / musl / baseline / baseline‑musl)
-            - Windows x64/arm64 (normal / baseline‑x64 only)
-            - macOS x64/arm64 (normal / baseline‑x64 only)
-            - VSCode Extension full arch support
-          files: dist/*.tar.gz
-          overwrite_files: true
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  uses: softprops/action-gh-release@v3
+  with:
+    tag_name: ${{ github.ref_name }}   # 或你实际用的标签名
+    files: dist/*.tar.gz
+    overwrite_files: true
+  env:
+    GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
