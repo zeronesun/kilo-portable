@@ -1,5 +1,7 @@
 name: Auto Build & Release
 on:
+  push:
+    branches: [ main ]
   workflow_dispatch:
   schedule:
     - cron: '0 0 * * *'
@@ -13,17 +15,16 @@ jobs:
     outputs:
       tag: ${{ steps.get-tag.outputs.TAG }}
     steps:
-      - name: 获取最新版本（包含预发布版）
+      - name: Get latest release (including pre-release)
         id: get-tag
         run: |
-          # 取最新1条Release（包含pre-release）
           TAG=$(curl -s --retry 3 "https://api.github.com/repos/Kilo-Org/kiloco/releases?per_page=1" | jq -r '.[0].tag_name')
           if [[ "$TAG" == "null" || -z "$TAG" ]]; then
-            echo "❌ 未获取到版本，终止"
+            echo "❌ No version found"
             exit 1
           fi
           echo "TAG=$TAG" >> $GITHUB_OUTPUT
-          echo "✅ 最新版本：$TAG"
+          echo "Latest version: $TAG"
 
   build:
     needs: get-version
@@ -32,21 +33,30 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: linux    arch: x64     type: normal
-          - os: linux    arch: x64     type: musl
-          - os: linux    arch: arm64   type: normal
-          - os: linux    arch: arm64   type: musl
-          - os: windows  arch: x64     type: modern
-
+          - os: linux
+            arch: x64
+            type: normal
+          - os: linux
+            arch: x64
+            type: musl
+          - os: linux
+            arch: arm64
+            type: normal
+          - os: linux
+            arch: arm64
+            type: musl
+          - os: windows
+            arch: x64
+            type: modern
     steps:
       - uses: actions/checkout@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: 安装依赖
+      - name: Install dependencies
         run: sudo apt update && sudo apt install -y wget jq unzip
 
-      - name: 构建便携包
+      - name: Build portable package
         run: |
           chmod +x build/build.sh
           ./build/build.sh ${{ needs.get-version.outputs.tag }} ${{ matrix.arch }} ${{ matrix.type }}
@@ -67,15 +77,15 @@ jobs:
           path: dist
           merge-multiple: true
 
-      - name: 发布便携版
+      - name: Create Release
         uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ needs.get-version.outputs.tag }}-portable
           name: Kilo ${{ needs.get-version.outputs.tag }} (Portable)
           body: |
-            🚀 自动同步官方预编译包构建
-            ✅ Linux x64/arm64 (glibc/musl)
-            ✅ Windows x64
+            🚀 Auto-built portable release
+            - Linux x64/arm64 (glibc/musl)
+            - Windows x64
           files: dist/*.tar.gz
           overwrite_files: true
         env:
