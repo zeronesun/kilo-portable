@@ -67,7 +67,7 @@ jobs:
       - name: 构建
         run: |
           chmod +x build/build.sh
-          ./build/build.sh ${{ needs.get-version.outputs.tag }} ${{ matrix.arch }} ${{ matrix.type }} ${{ matrix.os }}
+          ./build/build.sh ${{ needs.get-version.outputs.tag }} ${{ matrix.os }} ${{ matrix.arch }} ${{ matrix.type }}
 
       - name: 上传构建产物
         uses: actions/upload-artifact@v4
