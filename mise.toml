@@ -2,7 +2,7 @@
 name = "kiloco-portable"
 repository = "https://github.com/zeronesun/kilo-portable"
 homepage = "https://github.com/zeronesun/kilo-portable"
-description = "Kiloco 便携版，Linux/Windows 开箱即用"
+description = "Kiloco portable version, out of the box"
 
 [versions]
 latest = "https://api.github.com/repos/zeronesun/kilo-portable/releases/latest"
@@ -13,15 +13,21 @@ OS=$(uname -s | tr '[:upper:]' '[:lower:]')
 case $(uname -m) in
   x86_64|amd64) ARCH="x64" ;;
   aarch64|arm64) ARCH="arm64" ;;
-  *) echo "❌ 不支持架构"; exit 1 ;;
+  *) echo "Unsupported arch"; exit 1 ;;
 esac
 
-if ldd /bin/ls | grep -q musl; then LIBC="musl"; else LIBC="glibc"; fi
-PURE_VERSION="${version%-portable}"
+if ldd /bin/ls | grep -q musl; then
+  LIBC="musl"
+else
+  LIBC="glibc"
+fi
 
-curl -fL "https://github.com/zeronesun/kilo-portable/releases/download/${version}/kiloco-${PURE_VERSION}-portable-linux-${LIBC}-${ARCH}.tar.gz" | tar xz
+VER="${version%-portable}"
+URL="https://github.com/zeronesun/kilo-portable/releases/download/${version}/kiloco-${VER}-portable-linux-${LIBC}-${ARCH}.tar.gz"
+
+curl -fL "$URL" | tar xz
 mkdir -p "${mise_path}/bin"
 mv kiloco/bin/* "${mise_path}/bin/"
 chmod +x "${mise_path}/bin/kiloco"
-echo "✅ 安装成功！"
+echo "Install success!"
 """
