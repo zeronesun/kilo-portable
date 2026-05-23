@@ -1,29 +1,35 @@
 #!/bin/bash
 set -euo pipefail
 
+# 核心配置（全部半角符号，仓库名严格正确）
 PROJECT_NAME="kilo"
 OUTPUT_DIR="dist"
 TEMP_DIR="tmp"
-UPSTREAM_REPO="Kilo‑Org/kilocode"
+UPSTREAM_REPO="Kilo-Org/kilocode"
 UPSTREAM_BASE_URL="https://github.com/${UPSTREAM_REPO}/releases/download"
 
-cleanup() { rm -rf "$TEMP_DIR" "$PROJECT_NAME"; }
+# 清理临时文件
+cleanup() {
+  rm -rf "$TEMP_DIR" "$PROJECT_NAME"
+}
 trap cleanup EXIT
 
+# 下载工具（重试3次，稳定）
 download_file() {
-  local url="$1" output="$2"
-  echo "🔻 Download: $url"
+  local url="$1"
+  local output="$2"
+  echo "🔻 Downloading: $url"
   wget --progress=bar:force:noscroll -t 3 "$url" -O "$output"
 }
 
-# 统一输出文件名（和 opencode‑portable 格式完全一致）
+# 统一输出文件名（与 opencode‑portable 格式完全一致）
 render_filename() {
   local ver="$1" os="$2" arch="$3" typ="$4"
   echo "${PROJECT_NAME}-${ver}-portable-${os}-${arch}-${typ}.tar.gz"
 }
 
 # --------------------------
-# 1. Linux 构建（精准匹配官方文件名）
+# 1. Linux 构建（严格匹配官方文件名）
 # --------------------------
 build_linux() {
   local ver="$1" arch="$2" typ="$3"
@@ -32,7 +38,7 @@ build_linux() {
     normal) pkg_suffix="" ;;
     musl) pkg_suffix="-musl" ;;
     baseline) pkg_suffix="-baseline" ;;
-    baseline‑musl) pkg_suffix="-baseline‑musl" ;;
+    baseline-musl) pkg_suffix="-baseline-musl" ;;
   esac
   local pkg_name="${PROJECT_NAME}-linux-${arch}${pkg_suffix}.tar.gz"
   local out_name=$(render_filename "$ver" "linux" "$arch" "$typ")
@@ -46,11 +52,11 @@ build_linux() {
   chmod +x "$PROJECT_NAME/bin/$PROJECT_NAME"
 
   tar czf "${OUTPUT_DIR}/${out_name}" "$PROJECT_NAME/"
-  echo "✅ Linux Built: $out_name"
+  echo "✅ Linux Build Success: $out_name"
 }
 
 # --------------------------
-# 2. Windows 构建
+# 2. Windows 构建（严格匹配官方文件名）
 # --------------------------
 build_windows() {
   local ver="$1" arch="$2" typ="$3"
@@ -63,15 +69,16 @@ build_windows() {
   download_file "${UPSTREAM_BASE_URL}/${ver}/${pkg_name}" "$TEMP_DIR/win/pkg.zip"
   unzip -q "$TEMP_DIR/win/pkg.zip" -d "$TEMP_DIR/win"
 
+  # 生成一键启动脚本
   echo "@echo off
 ${PROJECT_NAME}.exe %*" > "$TEMP_DIR/win/${PROJECT_NAME}.bat"
 
   tar czf "${OUTPUT_DIR}/${out_name}" -C "$TEMP_DIR/win" .
-  echo "✅ Windows Built: $out_name"
+  echo "✅ Windows Build Success: $out_name"
 }
 
 # --------------------------
-# 3. macOS 构建
+# 3. macOS(Darwin) 构建（严格匹配官方文件名）
 # --------------------------
 build_darwin() {
   local ver="$1" arch="$2" typ="$3"
@@ -85,11 +92,11 @@ build_darwin() {
   unzip -q "$TEMP_DIR/darwin/pkg.zip" -d "$TEMP_DIR/darwin"
 
   tar czf "${OUTPUT_DIR}/${out_name}" -C "$TEMP_DIR/darwin" .
-  echo "✅ macOS Built: $out_name"
+  echo "✅ macOS Build Success: $out_name"
 }
 
 # --------------------------
-# 4. VSIX 构建（精准匹配所有8个VSIX）
+# 4. VSCode VSIX 插件构建（严格匹配所有官方VSIX文件名）
 # --------------------------
 build_vscode() {
   local ver="$1" arch="$2" typ="$3"
@@ -100,11 +107,11 @@ build_vscode() {
   download_file "${UPSTREAM_BASE_URL}/${ver}/${pkg_name}" "$TEMP_DIR/vsix/${pkg_name}"
 
   tar czf "${OUTPUT_DIR}/${out_name}" -C "$TEMP_DIR/vsix" "${pkg_name}"
-  echo "✅ VSIX Built: $out_name"
+  echo "✅ VSIX Build Success: $out_name"
 }
 
 # --------------------------
-# 主入口
+# 主入口（参数顺序严格：版本 系统 架构 类型）
 # --------------------------
 VERSION="$1"
 OS="$2"
@@ -116,5 +123,5 @@ case "$OS" in
   windows) build_windows "$VERSION" "$ARCH" "$TYPE" ;;
   darwin) build_darwin "$VERSION" "$ARCH" "$TYPE" ;;
   vscode) build_vscode "$VERSION" "$ARCH" "$TYPE" ;;
-  *) echo "❌ Invalid OS" && exit 1 ;;
+  *) echo "❌ Invalid OS Type: $OS" && exit 1 ;;
 esac
