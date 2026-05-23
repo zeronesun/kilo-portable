@@ -16,7 +16,6 @@ jobs:
       - name: Get latest kilocode release
         id: get-tag
         run: |
-          # 官方标准latest接口，仓库精准为kilocode
           TAG=$(curl -s --retry 3 https://api.github.com/repos/Kilo-Org/kilocode/releases/latest | jq -r '.tag_name')
           if [[ "$TAG" == "null" || -z "$TAG" ]]; then
             echo "❌ No version found"
@@ -32,21 +31,30 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: linux
-            arch: x64
-            type: normal
-          - os: linux
-            arch: x64
-            type: musl
-          - os: linux
-            arch: arm64
-            type: normal
-          - os: linux
-            arch: arm64
-            type: musl
-          - os: windows
-            arch: x64
-            type: modern
+          # ========== Linux 全版本 ==========
+          - os: linux  arch: x64    type: normal
+          - os: linux  arch: x64    type: musl
+          - os: linux  arch: x64    type: baseline
+          - os: linux  arch: x64    type: baseline‑musl
+          - os: linux  arch: arm64  type: normal
+          - os: linux  arch: arm64  type: musl
+          # ========== Windows 全版本 ==========
+          - os: windows arch: x64   type: normal
+          - os: windows arch: x64   type: baseline
+          - os: windows arch: arm64 type: normal
+          # ========== macOS 全版本 ==========
+          - os: darwin  arch: x64   type: normal
+          - os: darwin  arch: x64   type: baseline
+          - os: darwin  arch: arm64 type: normal
+          # ========== VSCode VSIX 全架构 ==========
+          - os: vscode  arch: x64   type: linux
+          - os: vscode  arch: arm64 type: linux
+          - os: vscode  arch: x64   type: win32
+          - os: vscode  arch: arm64 type: win32
+          - os: vscode  arch: x64   type: darwin
+          - os: vscode  arch: arm64 type: darwin
+          - os: vscode  arch: x64   type: alpine
+          - os: vscode  arch: arm64 type: alpine
 
     steps:
       - uses: actions/checkout@v4
@@ -59,7 +67,11 @@ jobs:
       - name: Build portable package
         run: |
           chmod +x build/build.sh
-          ./build/build.sh ${{ needs.get-version.outputs.tag }} ${{ matrix.arch }} ${{ matrix.type }}
+          ./build/build.sh \
+            ${{ needs.get-version.outputs.tag }} \
+            ${{ matrix.os }} \
+            ${{ matrix.arch }} \
+            ${{ matrix.type }}
 
       - uses: actions/upload-artifact@v4
         with:
@@ -71,8 +83,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
-      # 修复：必须加 actions/ 前缀
       - uses: actions/download-artifact@v4
         with:
           name: artifacts
@@ -82,12 +92,16 @@ jobs:
       - name: Create Release
         uses: softprops/action-gh-release@v3
         with:
-          tag_name: ${{ needs.get-version.outputs.tag }}-portable
+          tag_name: ${{ needs.get-version.outputs.tag }}‑portable
           name: Kilo ${{ needs.get-version.outputs.tag }} (Portable)
           body: |
-            🚀 Auto‑built portable release from Kilo‑Org/kilocode
-            - Linux x64/arm64 (glibc/musl)
-            - Windows x64
+            🚀 100% 同步官方所有资产构建
+            ## 📦 二进制便携版
+            - Linux x64/arm64 (normal / musl / baseline / baseline‑musl)
+            - Windows x64/arm64 (normal / baseline)
+            - macOS x64/arm64 (normal / baseline)
+            ## 🧩 VSCode 插件便携版
+            - Linux / Windows / macOS / Alpine 全架构
           files: dist/*.tar.gz
           overwrite_files: true
         env:
