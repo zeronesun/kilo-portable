@@ -13,10 +13,10 @@ jobs:
     outputs:
       tag: ${{ steps.get-tag.outputs.TAG }}
     steps:
-      - name: Get latest kilocode release
+      - name: Get latest kilocode release (include pre-release)
         id: get-tag
         run: |
-          TAG=$(curl -s --retry 3 https://api.github.com/repos/Kilo-Org/kilocode/releases/latest | jq -r '.tag_name')
+          TAG=$(curl -s --retry 3 https://api.github.com/repos/Kilo-Org/kilocode/releases?per_page=1 | jq -r '.[0].tag_name')
           if [[ "$TAG" == "null" || -z "$TAG" ]]; then
             echo "❌ No version found"
             exit 1
@@ -31,18 +31,18 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # Linux 全部官方版本
+          # Linux 全部有效版本（严格匹配官方）
           - os: linux    arch: x64    type: normal
           - os: linux    arch: x64    type: musl
           - os: linux    arch: x64    type: baseline
           - os: linux    arch: x64    type: baseline-musl
           - os: linux    arch: arm64  type: normal
           - os: linux    arch: arm64  type: musl
-          # Windows 全部官方版本
+          # Windows 有效版本（仅x64有baseline，arm64无baseline）
           - os: windows  arch: x64    type: normal
           - os: windows  arch: x64    type: baseline
           - os: windows  arch: arm64  type: normal
-          # macOS 全部官方版本
+          # macOS 有效版本（仅x64有baseline，arm64无baseline）
           - os: darwin   arch: x64    type: normal
           - os: darwin   arch: x64    type: baseline
           - os: darwin   arch: arm64  type: normal
@@ -65,14 +65,7 @@ jobs:
         run: sudo apt update && sudo apt install -y wget jq unzip
 
       - name: Build portable package
-        # 严格匹配脚本接收顺序：版本 系统 架构 类型
-        run: |
-          chmod +x build/build.sh
-          ./build/build.sh \
-            ${{ needs.get-version.outputs.tag }} \
-            ${{ matrix.os }} \
-            ${{ matrix.arch }} \
-            ${{ matrix.type }}
+        run: chmod +x build/build.sh && ./build/build.sh ${{ needs.get-version.outputs.tag }} ${{ matrix.os }} ${{ matrix.arch }} ${{ matrix.type }}
 
       - uses: actions/upload-artifact@v4
         with:
@@ -99,8 +92,8 @@ jobs:
             🚀 Auto‑built portable release from Kilo‑Org/kilocode
             ## 📦 Binary Portable Builds
             - Linux x64/arm64 (normal / musl / baseline / baseline‑musl)
-            - Windows x64/arm64 (normal / baseline)
-            - macOS x64/arm64 (normal / baseline)
+            - Windows x64/arm64 (normal / baseline‑x64 only)
+            - macOS x64/arm64 (normal / baseline‑x64 only)
             ## 🧩 VSCode Extension Portable Builds
             - Linux / Windows / macOS / Alpine full arch support
           files: dist/*.tar.gz
