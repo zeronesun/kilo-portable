@@ -13,10 +13,10 @@ jobs:
     outputs:
       tag: ${{ steps.get-tag.outputs.TAG }}
     steps:
-      - name: Get latest kilocode release (include pre-release)
+      - name: Get latest kilocode release
         id: get-tag
         run: |
-          TAG=$(curl -s --retry 3 https://api.github.com/repos/Kilo-Org/kilocode/releases?per_page=1 | jq -r '.[0].tag_name')
+          TAG=$(curl -s --retry 3 https://api.github.com/repos/Kilo-Org/kilocode/releases/latest | jq -r '.tag_name')
           if [[ "$TAG" == "null" || -z "$TAG" ]]; then
             echo "❌ No version found"
             exit 1
@@ -31,22 +31,22 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # Linux 全部有效版本（严格匹配官方）
+          # Linux（第35行修正：baseline-musl 半角横线）
           - os: linux    arch: x64    type: normal
           - os: linux    arch: x64    type: musl
           - os: linux    arch: x64    type: baseline
           - os: linux    arch: x64    type: baseline-musl
           - os: linux    arch: arm64  type: normal
           - os: linux    arch: arm64  type: musl
-          # Windows 有效版本（仅x64有baseline，arm64无baseline）
+          # Windows
           - os: windows  arch: x64    type: normal
           - os: windows  arch: x64    type: baseline
           - os: windows  arch: arm64  type: normal
-          # macOS 有效版本（仅x64有baseline，arm64无baseline）
+          # macOS
           - os: darwin   arch: x64    type: normal
           - os: darwin   arch: x64    type: baseline
           - os: darwin   arch: arm64  type: normal
-          # VSCode VSIX 全部官方版本
+          # VSCode VSIX
           - os: vscode   arch: x64    type: linux
           - os: vscode   arch: arm64  type: linux
           - os: vscode   arch: x64    type: win32
@@ -91,7 +91,7 @@ jobs:
           body: |
             🚀 Auto‑built portable release from Kilo‑Org/kilocode
             ## 📦 Binary Portable Builds
-            - Linux x64/arm64 (normal / musl / baseline / baseline‑musl)
+            - Linux x64/arm64 (normal / musl / baseline / baseline-musl)
             - Windows x64/arm64 (normal / baseline‑x64 only)
             - macOS x64/arm64 (normal / baseline‑x64 only)
             ## 🧩 VSCode Extension Portable Builds
