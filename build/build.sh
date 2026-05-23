@@ -1,101 +1,112 @@
-#!/bin/bash
-set -euo pipefail
+name: Auto Build & Release
 
-PROJECT_NAME="kilo"
-OUTPUT_DIR="dist"
-TEMP_DIR="tmp"
-UPSTREAM_REPO="Kilo-Org/kilocode"
-UPSTREAM_BASE_URL="https://github.com/${UPSTREAM_REPO}/releases/download"
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 0 * * *'
 
-cleanup() {
-  rm -rf "$TEMP_DIR" "$PROJECT_NAME"
-}
-trap cleanup EXIT
+permissions:
+  contents: write
 
-download_file() {
-  local url="$1"
-  local output="$2"
-  wget --progress=bar:force:noscroll -t 3 "$url" -O "$output"
-}
+jobs:
+  get-version:
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.get-tag.outputs.TAG }}
+    steps:
+      - name: 获取官方最新版本
+        id: get-tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # 获取最新 Release（包括 Pre-release）
+          TAG=$(gh api repos/Kilo-Org/kilocode/releases --jq '.[0].tag_name')
+          if [ -z "$TAG" ] || [ "$TAG" = "null" ]; then
+            echo "❌ 无法获取到最新版本，请检查仓库和网络。"
+            exit 1
+          fi
+          echo "TAG=$TAG" >> $GITHUB_OUTPUT
+          echo "✅ 官方最新版本: $TAG"
 
-render_filename() {
-  local ver="$1" os="$2" arch="$3" typ="$4"
-  echo "${PROJECT_NAME}-${ver}-portable-${os}-${arch}-${typ}.tar.gz"
-}
+  build:
+    needs: get-version
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: linux
+            arch: x86_64
+            type: normal
+          - os: linux
+            arch: x86_64
+            type: musl
+          - os: linux
+            arch: arm64
+            type: normal
+          - os: linux
+            arch: arm64
+            type: musl
+          - os: windows
+            arch: x64
+            type: modern
+          - os: windows
+            arch: x64
+            type: legacy
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          persist-credentials: false
+          fetch-depth: 1
 
-build_linux() {
-  local ver="$1" arch="$2" typ="$3"
-  local suffix=""
-  case "$typ" in
-    normal) suffix="" ;;
-    musl) suffix="-musl" ;;
-    baseline) suffix="-baseline" ;;
-    baseline-musl) suffix="-baseline-musl" ;;
-  esac
-  local pkg="${PROJECT_NAME}-linux-${arch}${suffix}.tar.gz"
-  local out=$(render_filename "$ver" "linux" "$arch" "$typ")
+      - name: 安装依赖
+        run: sudo apt update && sudo apt install -y wget jq unzip
 
-  mkdir -p "$OUTPUT_DIR" "$TEMP_DIR" "$PROJECT_NAME/bin"
-  download_file "${UPSTREAM_BASE_URL}/${ver}/${pkg}" "$TEMP_DIR/pkg.tar.gz"
-  tar xf "$TEMP_DIR/pkg.tar.gz" -C "$TEMP_DIR"
+      - name: 构建
+        run: |
+          chmod +x build/build.sh
+          ./build/build.sh ${{ needs.get-version.outputs.tag }} ${{ matrix.os }} ${{ matrix.arch }} ${{ matrix.type }}
 
-  local bin=$(find "$TEMP_DIR" -name "$PROJECT_NAME" -type f | head -n1)
-  cp "$bin" "$PROJECT_NAME/bin/"
-  chmod +x "$PROJECT_NAME/bin/$PROJECT_NAME"
-  tar czf "${OUTPUT_DIR}/${out}" "$PROJECT_NAME/"
-}
+      - name: 上传构建产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.os }}-${{ matrix.type }}-${{ matrix.arch }}
+          path: dist/*.tar.gz
 
-build_windows() {
-  local ver="$1" arch="$2" typ="$3"
-  local suffix=""
-  if [[ "$arch" == "x64" && "$typ" == "baseline" ]]; then
-    suffix="-baseline"
-  fi
-  local pkg="${PROJECT_NAME}-windows-${arch}${suffix}.zip"
-  local out=$(render_filename "$ver" "windows" "$arch" "$typ")
+  release:
+    needs: [get-version, build]
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          persist-credentials: false
+          fetch-depth: 1
 
-  mkdir -p "$OUTPUT_DIR" "$TEMP_DIR/win"
-  download_file "${UPSTREAM_BASE_URL}/${ver}/${pkg}" "$TEMP_DIR/win/pkg.zip"
-  unzip -q "$TEMP_DIR/win/pkg.zip" -d "$TEMP_DIR/win"
-  echo "@echo off
-${PROJECT_NAME}.exe %*" > "$TEMP_DIR/win/${PROJECT_NAME}.bat"
-  tar czf "${OUTPUT_DIR}/${out}" -C "$TEMP_DIR/win" .
-}
+      - name: 下载所有构建产物
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
 
-build_darwin() {
-  local ver="$1" arch="$2" typ="$3"
-  local suffix=""
-  if [[ "$arch" == "x64" && "$typ" == "baseline" ]]; then
-    suffix="-baseline"
-  fi
-  local pkg="${PROJECT_NAME}-darwin-${arch}${suffix}.zip"
-  local out=$(render_filename "$ver" "darwin" "$arch" "$typ")
+      - name: 列出产物
+        run: ls -lh dist/
 
-  mkdir -p "$OUTPUT_DIR" "$TEMP_DIR/darwin"
-  download_file "${UPSTREAM_BASE_URL}/${ver}/${pkg}" "$TEMP_DIR/darwin/pkg.zip"
-  unzip -q "$TEMP_DIR/darwin/pkg.zip" -d "$TEMP_DIR/darwin"
-  tar czf "${OUTPUT_DIR}/${out}" -C "$TEMP_DIR/darwin" .
-}
-
-build_vscode() {
-  local ver="$1" arch="$2" typ="$3"
-  local pkg="${PROJECT_NAME}-vscode-${typ}-${arch}.vsix"
-  local out=$(render_filename "$ver" "vscode" "$arch" "$typ")
-
-  mkdir -p "$OUTPUT_DIR" "$TEMP_DIR/vsix"
-  download_file "${UPSTREAM_BASE_URL}/${ver}/${pkg}" "$TEMP_DIR/vsix/${pkg}"
-  tar czf "${OUTPUT_DIR}/${out}" -C "$TEMP_DIR/vsix" "${pkg}"
-}
-
-VERSION="$1"
-OS="$2"
-ARCH="$3"
-TYPE="$4"
-
-case "$OS" in
-  linux) build_linux "$VERSION" "$ARCH" "$TYPE" ;;
-  windows) build_windows "$VERSION" "$ARCH" "$TYPE" ;;
-  darwin) build_darwin "$VERSION" "$ARCH" "$TYPE" ;;
-  vscode) build_vscode "$VERSION" "$ARCH" "$TYPE" ;;
-  *) exit 1 ;;
-esac
+      - name: 创建/更新 GitHub Release
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ needs.get-version.outputs.tag }}-portable
+          name: Kilocode ${{ needs.get-version.outputs.tag }} (Portable)
+          body: |
+            便携版
+            - Linux x64/arm64 (glibc/musl)
+            - Windows x64 (Bun / Node.js)
+          files: dist/*.tar.gz
+          overwrite_files: true
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
